@@ -12,17 +12,15 @@ def readConfiguration():
     return []
 
   result = []
-  for line in f.readlines():
-    strippedLine = line.strip()
-    if strippedLine:
+  for line in f:
+    if strippedLine := line.strip():
       result.append(strippedLine)
   f.close()
   return result
 
 def writeConfiguration(lines):
-  f = open(CONFIG_NAME, "w")
-  f.writelines(lines)
-  f.close()
+  with open(CONFIG_NAME, "w") as f:
+    f.writelines(lines)
 
 def parseArguments(arguments):
   nextIsInclude = False
@@ -70,10 +68,10 @@ def parseArguments(arguments):
     elif arg.startswith('-W'):
       options.append(arg)
 
-  result = list(map(lambda x: "-I" + x, includes))
-  result.extend(map(lambda x: "-D" + x, defines))
-  result.extend(map(lambda x: "-include " + x, include_file))
-  result.extend(map(lambda x: "-isystem" + x, isystem))
+  result = list(map(lambda x: f"-I{x}", includes))
+  result.extend(map(lambda x: f"-D{x}", defines))
+  result.extend(map(lambda x: f"-include {x}", include_file))
+  result.extend(map(lambda x: f"-isystem{x}", isystem))
   result.extend(options)
 
   return result

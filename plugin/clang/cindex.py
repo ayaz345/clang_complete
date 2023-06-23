@@ -180,10 +180,7 @@ class SourceLocation(Structure):
             f, l, c, o = c_object_p(), c_uint(), c_uint(), c_uint()
             conf.lib.clang_getInstantiationLocation(self, byref(f), byref(l),
                     byref(c), byref(o))
-            if f:
-                f = File(f)
-            else:
-                f = None
+            f = File(f) if f else None
             self._data = (f, int(l.value), int(c.value), int(o.value))
         return self._data
 
@@ -232,10 +229,7 @@ class SourceLocation(Structure):
         return not self.__eq__(other)
 
     def __repr__(self):
-        if self.file:
-            filename = self.file.name
-        else:
-            filename = None
+        filename = self.file.name if self.file else None
         return "<SourceLocation file %r, line %r, column %r>" % (
             filename, self.line, self.column)
 
@@ -457,7 +451,7 @@ class TokenKind(object):
         self.name = name
 
     def __repr__(self):
-        return 'TokenKind.%s' % (self.name,)
+        return f'TokenKind.{self.name}'
 
     @staticmethod
     def from_value(value):
@@ -564,7 +558,7 @@ class CursorKind(object):
         return conf.lib.clang_isUnexposed(self)
 
     def __repr__(self):
-        return 'CursorKind.%s' % (self.name,)
+        return f'CursorKind.{self.name}'
 
 # FIXME: Is there a nicer way to expose this enumeration? We could potentially
 # represent the nested structure, or even build a class hierarchy. The main
@@ -1403,7 +1397,7 @@ class TypeKind(object):
         return TypeKind._kinds[id]
 
     def __repr__(self):
-        return 'TypeKind.%s' % (self.name,)
+        return f'TypeKind.{self.name}'
 
 TypeKind.INVALID = TypeKind(0)
 TypeKind.UNEXPOSED = TypeKind(1)
@@ -1537,12 +1531,14 @@ class Type(Structure):
     def from_result(res, fn, args):
         assert isinstance(res, Type)
 
-        tu = None
-        for arg in args:
-            if hasattr(arg, 'translation_unit'):
-                tu = arg.translation_unit
-                break
-
+        tu = next(
+            (
+                arg.translation_unit
+                for arg in args
+                if hasattr(arg, 'translation_unit')
+            ),
+            None,
+        )
         assert tu is not None
         res._tu = tu
 
@@ -1692,7 +1688,7 @@ class CompletionChunk:
             return self.name
 
         def __repr__(self):
-            return "<ChunkKind: %s>" % self
+            return f"<ChunkKind: {self}>"
 
     def __init__(self, completionString, key):
         self.cs = completionString
@@ -1724,13 +1720,12 @@ class CompletionChunk:
 
     @CachedProperty
     def string(self):
-        res = conf.lib.clang_getCompletionChunkCompletionString(self.cs,
-                                                                self.key)
-
-        if (res):
-          return CompletionString(res)
+        if res := conf.lib.clang_getCompletionChunkCompletionString(
+            self.cs, self.key
+        ):
+            return CompletionString(res)
         else:
-          None
+            None
 
     def isKindOptional(self):
       return self.__kindNumber == 0
@@ -1779,7 +1774,7 @@ class CompletionString(ClangObject):
             return self.name
 
         def __repr__(self):
-            return "<Availability: %s>" % self
+            return f"<Availability: {self}>"
 
     def __len__(self):
         self.num_chunks
@@ -1998,12 +1993,7 @@ class TranslationUnit(ClangObject):
         the input filename. If you pass in source code containing a C++ class
         declaration with the filename "test.c" parsing will fail.
         """
-        if args is None:
-            args = []
-        else:
-            # make a copy, because we're modifying the list right below
-            args = list(args)
-
+        args = [] if args is None else list(args)
         args.append('-fno-color-diagnostics')
 
         if unsaved_files is None:
@@ -2013,7 +2003,7 @@ class TranslationUnit(ClangObject):
             index = Index.create()
 
         args_array = None
-        if len(args) > 0:
+        if args:
             args_array = (c_char_p * len(args))(* [encode(arg) for arg in args])
 
         unsaved_array = None
@@ -2027,14 +2017,18 @@ class TranslationUnit(ClangObject):
                 unsaved_array[i].contents = encode(contents)
                 unsaved_array[i].length = len(unsaved_array[i].contents)
 
-        ptr = conf.lib.clang_parseTranslationUnit(index, encode(filename),
-                                    args_array, len(args), unsaved_array,
-                                    len(unsaved_files), options)
-
-        if not ptr:
+        if ptr := conf.lib.clang_parseTranslationUnit(
+            index,
+            encode(filename),
+            args_array,
+            len(args),
+            unsaved_array,
+            len(unsaved_files),
+            options,
+        ):
+            return cls(ptr, index=index)
+        else:
             raise TranslationUnitLoadError("Error parsing translation unit.")
-
-        return cls(ptr, index=index)
 
     @classmethod
     def from_ast_file(cls, filename, index=None):
@@ -2052,11 +2046,10 @@ class TranslationUnit(ClangObject):
         if index is None:
             index = Index.create()
 
-        ptr = conf.lib.clang_createTranslationUnit(index, filename)
-        if not ptr:
+        if ptr := conf.lib.clang_createTranslationUnit(index, filename):
+            return cls(ptr=ptr, index=index)
+        else:
             raise TranslationUnitLoadError(filename)
-
-        return cls(ptr=ptr, index=index)
 
     def __init__(self, ptr, index):
         """Create a TranslationUnit instance.
@@ -2167,6 +2160,8 @@ class TranslationUnit(ClangObject):
         """
         Return an iterable (and indexable) object containing the diagnostics.
         """
+
+
         class DiagIterator:
             def __init__(self, tu):
                 self.tu = tu
@@ -2175,10 +2170,12 @@ class TranslationUnit(ClangObject):
                 return int(conf.lib.clang_getNumDiagnostics(self.tu))
 
             def __getitem__(self, key):
-                diag = conf.lib.clang_getDiagnostic(self.tu, key)
-                if not diag:
+                if diag := conf.lib.clang_getDiagnostic(self.tu, key):
+                    return Diagnostic(diag)
+
+                else:
                     raise IndexError
-                return Diagnostic(diag)
+
 
         return DiagIterator(self)
 
@@ -2272,9 +2269,15 @@ class TranslationUnit(ClangObject):
                 unsaved_files_array[i].name = encode(name)
                 unsaved_files_array[i].contents = encode(value)
                 unsaved_files_array[i].length = len(unsaved_files_array[i].contents)
-        ptr = conf.lib.clang_codeCompleteAt(self, encode(path), line, column,
-                unsaved_files_array, len(unsaved_files), options)
-        if ptr:
+        if ptr := conf.lib.clang_codeCompleteAt(
+            self,
+            encode(path),
+            line,
+            column,
+            unsaved_files_array,
+            len(unsaved_files),
+            options,
+        ):
             return CodeCompletionResults(ptr)
         return None
 
@@ -2316,7 +2319,7 @@ class File(ClangObject):
         return self.name
 
     def __repr__(self):
-        return "<File: %s>" % (self.name)
+        return f"<File: {self.name}>"
 
     @staticmethod
     def from_cursor_result(res, fn, args):
@@ -2411,16 +2414,14 @@ class CompileCommands(object):
         return int(conf.lib.clang_CompileCommands_getSize(self.ccmds))
 
     def __getitem__(self, i):
-        cc = conf.lib.clang_CompileCommands_getCommand(self.ccmds, i)
-        if not cc:
+        if cc := conf.lib.clang_CompileCommands_getCommand(self.ccmds, i):
+            return CompileCommand(cc, self)
+        else:
             raise IndexError
-        return CompileCommand(cc, self)
 
     @staticmethod
     def from_result(res, fn, args):
-        if not res:
-            return None
-        return CompileCommands(res)
+        return None if not res else CompileCommands(res)
 
 class CompilationDatabase(ClangObject):
     """
@@ -3069,10 +3070,9 @@ def register_function(lib, item, ignore_errors):
     try:
         func = getattr(lib, item[0])
     except AttributeError as e:
-        msg = str(e) + ". Please ensure that your python bindings are "\
-                       "compatible with your libclang.so version."
         if ignore_errors:
             return
+        msg = f"{str(e)}. Please ensure that your python bindings are compatible with your libclang.so version."
         raise LibclangError(msg)
 
     if len(item) >= 2:
@@ -3166,7 +3166,7 @@ class Config:
             file = find_library("clang") or 'libclang.so'
 
         if Config.library_path:
-            file = Config.library_path + '/' + file
+            file = f'{Config.library_path}/{file}'
 
         return file
 

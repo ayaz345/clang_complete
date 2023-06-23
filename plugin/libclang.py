@@ -44,20 +44,20 @@ def getBuiltinHeaderPath(library_path):
     library_path = os.path.dirname(library_path)
 
   knownPaths = [
-          library_path + "/../lib/clang",  # default value
-          library_path + "/../clang",      # gentoo
-          library_path + "/clang",         # opensuse
-          library_path + "/",              # Google
-          "/usr/lib64/clang",              # x86_64 (openSUSE, Fedora)
-          "/usr/lib/clang"
+      f"{library_path}/../lib/clang",
+      f"{library_path}/../clang",
+      f"{library_path}/clang",
+      f"{library_path}/",
+      "/usr/lib64/clang",
+      "/usr/lib/clang",
   ]
 
   for path in knownPaths:
     try:
-      subDirs = [f for f in os.listdir(path) if os.path.isdir(path + "/" + f)]
+      subDirs = [f for f in os.listdir(path) if os.path.isdir(f"{path}/{f}")]
       subDirs = sorted(subDirs) or ['.']
-      path = path + "/" + subDirs[-1] + "/include"
-      if canFindBuiltinHeaders(index, ["-I" + path]):
+      path = f"{path}/{subDirs[-1]}/include"
+      if canFindBuiltinHeaders(index, [f"-I{path}"]):
         return path
     except:
       pass
@@ -82,15 +82,11 @@ def initClangComplete(clang_complete_flags, clang_compilation_database, \
     index = Index.create()
   except Exception as e:
     if library_path:
-      suggestion = "Are you sure '%s' contains libclang?" % library_path
+      suggestion = f"Are you sure '{library_path}' contains libclang?"
     else:
       suggestion = "Consider setting g:clang_library_path."
 
-    if debug:
-      exception_msg = str(e)
-    else:
-      exception_msg = ''
-
+    exception_msg = str(e) if debug else ''
     print('''Loading libclang failed, completion won't be available. %s
     %s
     ''' % (suggestion, exception_msg))
@@ -114,7 +110,7 @@ def initClangComplete(clang_complete_flags, clang_compilation_database, \
   # New cache entry for the same path, but with different list of arguments,
   # overwrite previously cached data.
   global translationUnits
-  translationUnits = dict()
+  translationUnits = {}
 
   global complete_flags
   complete_flags = int(clang_complete_flags)
@@ -144,14 +140,17 @@ class CodeCompleteTimer:
     print(" ")
     print("libclang code completion")
     print("========================")
-    print("Command: clang %s -fsyntax-only " % " ".join(decode(params['args'])), end=' ')
+    print(
+        f"""Command: clang {" ".join(decode(params['args']))} -fsyntax-only """,
+        end=' ',
+    )
     print("-Xclang -code-completion-at=%s:%d:%d %s"
        % (file, line, column, file))
-    print("cwd: %s" % params['cwd'])
-    print("File: %s" % file)
+    print(f"cwd: {params['cwd']}")
+    print(f"File: {file}")
     print("Line: %d, Column: %d" % (line, column))
     print(" ")
-    print("%s" % content)
+    print(f"{content}")
 
     print(" ")
 
@@ -240,11 +239,13 @@ def getQuickFix(diagnostic):
   else:
     return None
 
-  return dict({ 'bufnr' : int(vim.eval("bufnr('" + filename + "', 1)")),
-    'lnum' : diagnostic.location.line,
-    'col' : diagnostic.location.column,
-    'text' : decode(diagnostic.spelling),
-    'type' : type})
+  return dict({
+      'bufnr': int(vim.eval(f"bufnr('{filename}', 1)")),
+      'lnum': diagnostic.location.line,
+      'col': diagnostic.location.column,
+      'text': decode(diagnostic.spelling),
+      'type': type,
+  })
 
 def getQuickFixList(tu):
   return [_f for _f in map (getQuickFix, tu.diagnostics) if _f]
@@ -253,7 +254,7 @@ def highlightRange(range, hlGroup):
   pattern = '/\%' + str(range.start.line) + 'l' + '\%' \
       + str(range.start.column) + 'c' + '.*' \
       + '\%' + str(range.end.column) + 'c/'
-  command = "exe 'syntax match' . ' " + hlGroup + ' ' + pattern + "'"
+  command = f"exe 'syntax match' . ' {hlGroup} {pattern}'"
   vim.command(command)
 
 def highlightDiagnostic(diagnostic):
@@ -270,7 +271,7 @@ def highlightDiagnostic(diagnostic):
 
   pattern = '/\%' + str(diagnostic.location.line) + 'l\%' \
       + str(diagnostic.location.column) + 'c./'
-  command = "exe 'syntax match' . ' " + hlGroup + ' ' + pattern + "'"
+  command = f"exe 'syntax match' . ' {hlGroup} {pattern}'"
   vim.command(command)
 
   for range in diagnostic.ranges:
@@ -329,7 +330,7 @@ def getCompilationDBParams(fileName):
           includePath = arg[2:]
           if not os.path.isabs(includePath):
             includePath = os.path.normpath(os.path.join(cwd, includePath))
-          args.append('-I'+includePath)
+          args.append(f'-I{includePath}')
           continue
         args.append(arg)
       getCompilationDBParams.last_query = { 'args': args, 'cwd': cwd }
@@ -351,7 +352,7 @@ def getCompileParams(fileName):
   args += splitOptions(vim.eval("b:clang_parameters"))
 
   if builtinHeaderPath and '-nobuiltininc' not in args:
-    args.append("-I" + builtinHeaderPath)
+    args.append(f"-I{builtinHeaderPath}")
 
   return { 'args' : args,
            'cwd' : params['cwd'] }
@@ -373,7 +374,7 @@ def getCurrentCompletionResults(line, column, args, currentFile, fileName,
   tu = getCurrentTranslationUnit(args, currentFile, fileName, timer)
   timer.registerEvent("Get TU")
 
-  if tu == None:
+  if tu is None:
     return None
 
   cr = tu.codeComplete(fileName, line, column, [currentFile],
@@ -392,8 +393,7 @@ the way that vimscript expects
 class VimscriptEscapingDict(dict):
   def __repr__(self):
     repr = super(VimscriptEscapingDict, self).__repr__()
-    new_repr = repr.replace("\\'", "''")
-    return new_repr
+    return repr.replace("\\'", "''")
 
 def formatResult(result):
   completion = VimscriptEscapingDict()
@@ -434,7 +434,7 @@ def formatResult(result):
       for optional_arg in roll_out_optional(chunk.string):
         if place_markers_for_optional_args:
           word += snippetsFormatPlaceHolder(optional_arg)
-        info += optional_arg + "=?"
+        info += f"{optional_arg}=?"
 
     if chunk.isKindPlaceHolder():
       word += snippetsFormatPlaceHolder(chunk_spelling)
@@ -446,7 +446,7 @@ def formatResult(result):
   menu = info
 
   if returnValue:
-    menu = decode(returnValue.spelling) + " " + menu
+    menu = f"{decode(returnValue.spelling)} {menu}"
 
   completion['word'] = snippetsAddSnippet(info, word, abbr)
   completion['abbr'] = abbr
@@ -531,7 +531,7 @@ def getCurrentCompletions(base):
 
   results = cr.results
 
-  timer.registerEvent("Count # Results (%s)" % str(len(results)))
+  timer.registerEvent(f"Count # Results ({len(results)})")
 
   if base != "":
     results = [x for x in results if getAbbr(x.string).startswith(base)]
@@ -553,17 +553,18 @@ def getCurrentCompletions(base):
   return (str(result), timer)
 
 def getAbbr(strings):
-  for chunks in strings:
-    if chunks.isKindTypedText():
-      return decode(chunks.spelling)
-  return ""
+  return next(
+      (decode(chunks.spelling)
+       for chunks in strings if chunks.isKindTypedText()),
+      "",
+  )
 
 def jumpToLocation(filename, line, column, preview):
   filenameEscaped = decode(filename).replace(" ", "\\ ")
   if preview:
     command = "pedit +%d %s" % (line, filenameEscaped)
   elif filename != vim.current.buffer.name:
-    command = "edit %s" % filenameEscaped
+    command = f"edit {filenameEscaped}"
   else:
     command = "normal! m'"
   try:

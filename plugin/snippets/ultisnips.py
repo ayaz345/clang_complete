@@ -14,7 +14,8 @@ except:
 def snippetsInit():
   global ultisnips_idx
   ultisnips_idx = 0
-  UltiSnips_Manager.add_buffer_filetypes('%s.clang_complete' % vim.eval('&filetype'))
+  UltiSnips_Manager.add_buffer_filetypes(
+      f"{vim.eval('&filetype')}.clang_complete")
 
 def snippetsFormatPlaceHolder(word):
   # Better way to do that?

@@ -3,8 +3,9 @@ import vim
 
 def snippetsInit():
   python_cmd = vim.eval('s:py_cmd')
-  vim.command("noremap <silent> <buffer> <tab> :{} updateSnips()<CR>".format(python_cmd))
-  vim.command("snoremap <silent> <buffer> <tab> <ESC>:{} updateSnips()<CR>".format(python_cmd))
+  vim.command(f"noremap <silent> <buffer> <tab> :{python_cmd} updateSnips()<CR>")
+  vim.command(
+      f"snoremap <silent> <buffer> <tab> <ESC>:{python_cmd} updateSnips()<CR>")
   if int(vim.eval("g:clang_conceal_snippets")) == 1:
     vim.command("syntax match placeHolder /\$`[^`]*`/ contains=placeHolderMark")
     vim.command("syntax match placeHolderMark contained /\$`/ conceal")
@@ -14,7 +15,7 @@ def snippetsInit():
 # more that the strict necessary.
 
 def snippetsFormatPlaceHolder(word):
-  return "$`%s`" % word
+  return f"$`{word}`"
 
 def snippetsAddSnippet(fullname, word, abbr):
   return word
@@ -36,9 +37,9 @@ def updateSnips():
   result = r.search(line, col)
   if result is None:
     result = r.search(line)
-    if result is None:
-      vim.command('call feedkeys("\<c-i>", "n")')
-      return
+  if result is None:
+    vim.command('call feedkeys("\<c-i>", "n")')
+    return
 
   start, end = result.span()
   vim.current.window.cursor = row, start
